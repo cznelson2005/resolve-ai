@@ -1,5 +1,3 @@
-### 🔀 Agent Pipeline Topology
-
 ```mermaid
 graph TD
     A[User Query + Marketplace Context] --> B[retrieval_node: Dual-Namespace RAG]
