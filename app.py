@@ -1,12 +1,11 @@
 import streamlit as st
 import uuid
-import time
+import pandas as pd
 from production import *
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 
-# --- Configuration & Pipeline ---
-# 你的 build_pipeline 邏輯保持不變
+# --- Pipeline Logic (保持不變) ---
 def build_pipeline():
     workflow = StateGraph(TicketState)
     workflow.add_node("retrieval", retrieval_node)
@@ -27,91 +26,81 @@ def build_pipeline():
 
 app = build_pipeline()
 
-# --- UI Layout ---
+# --- 決策監控儀表板函式 ---
+def render_telemetry(final_state):
+    evaluation = final_state.get("evaluation", {})
+    supervisor = final_state.get("supervisor_decision", {})
+    latency = final_state.get("latency_metrics", {})
+    support_contexts = final_state.get("support_contexts", [])
+    past_cases = final_state.get("past_cases", [])
+    errors = final_state.get("errors", [])
+
+    severity_score = evaluation.get("severity_score", "N/A")
+    severity_label = evaluation.get("severity_label", "N/A")
+    issue_type = evaluation.get("issue_type", "N/A")
+    trust_safety = evaluation.get("trust_safety", False)
+    escalate = evaluation.get("escalate", False)
+
+    route = "Supervisor Review" if escalate else "Auto-Resolved"
+    total_latency = round(sum(latency.values()), 2) if latency else 0
+
+    st.subheader("📊 Decision Summary")
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Severity", f"{severity_score} / 5", severity_label)
+    m2.metric("Escalation", "Yes" if escalate else "No")
+    m3.metric("Route", route)
+    m4.metric("Total Latency", f"{total_latency}s")
+
+    st.divider()
+    left, right = st.columns([1, 1])
+
+    with left:
+        st.subheader("🚨 Risk Assessment")
+        risk_items = [("Issue Type", issue_type), ("Sentiment", evaluation.get("sentiment", "N/A")), ("Escalation", "Yes" if escalate else "No")]
+        for label, value in risk_items: st.write(f"**{label}:** {value}")
+        if evaluation.get("reasoning"): st.warning(evaluation.get("reasoning"))
+
+    with right:
+        st.subheader("🧑‍💼 Supervisor Decision")
+        if supervisor:
+            st.write(f"**Action:** `{supervisor.get('action', 'N/A')}`")
+            st.write(f"**Assigned To:** `{supervisor.get('assigned_to', 'N/A')}`")
+            st.info(supervisor.get("internal_notes", "No notes."))
+        else:
+            st.success("Auto-resolved path.")
+
+    st.divider()
+    st.subheader("⏱️ Node Latency")
+    if latency:
+        latency_df = pd.DataFrame([{"Node": k.replace("_node", "").replace("_", " ").title(), "Latency (s)": v} for k, v in latency.items()])
+        st.bar_chart(latency_df.set_index("Node"))
+    
+    st.subheader("📚 Retrieved Evidence")
+    e1, e2 = st.columns(2)
+    with e1:
+        st.write("**Policy Matches**")
+        for ctx in support_contexts[:2]: st.expander(f"{ctx.get('intent', 'Policy')}").write(ctx.get("response", ""))
+    with e2:
+        st.write("**Past Action Logs**")
+        for case in past_cases[:2]: st.expander(f"Case Match").json(case)
+
+# --- UI 渲染 ---
 st.set_page_config(layout="wide", page_title="ResolveFlow AI")
 st.title("🛡️ ResolveFlow AI — Support Triage Simulator")
 
-# 1. Scenarios
 SCENARIOS = {
-    "Routine Refund Question": "How do I update my billing address?",
-    "Low-Value Delivery Dispute": "The item I received is slightly different from the listing. It costs $12.",
-    "High-Value Watch Scam": "I had a chat with a seller regarding buying a $1000 watch. I made a $500 payment and the seller disappeared.",
-    "Account Takeover": "I think someone hacked my account and changed my payout details.",
-    "Off-Platform Payment Attempt": "The seller asked me to transfer money via bank transfer outside the platform."
+    "High-Value Watch Scam": "I made a $500 payment and the seller disappeared.",
+    "Routine Refund": "How long does a refund take?",
+    "Off-Platform Payment": "The seller asked me to transfer money via bank."
 }
 
 col_top1, col_top2 = st.columns([1, 3])
-with col_top1:
-    scenario = st.selectbox("Demo Scenario", list(SCENARIOS.keys()))
-with col_top2:
-    query = st.text_area("Customer Ticket", value=SCENARIOS[scenario], height=100)
+scenario = col_top1.selectbox("Demo Scenario", list(SCENARIOS.keys()))
+query = col_top2.text_area("Customer Ticket", value=SCENARIOS[scenario], height=100)
 
 if st.button("🚀 Run Pipeline", type="primary"):
     thread_id = str(uuid.uuid4())
-    inputs = {"query": query, "latency_metrics": {}}
+    final_state = app.invoke({"query": query, "latency_metrics": {}}, config={"configurable": {"thread_id": thread_id}})
     
-    # Run pipeline
-    final_state = app.invoke(inputs, config={"configurable": {"thread_id": thread_id}})
-    
-    # 2. Executive Metrics Cards
-    eval_data = final_state.get("evaluation", {})
-    sup_data = final_state.get("supervisor_decision", {})
-    latency = final_state.get("latency_metrics", {})
-    
-    severity = eval_data.get("severity_score", "N/A")
-    escalate = eval_data.get("escalate", False)
-    route = "Supervisor Review" if escalate else "Auto Response"
-    total_lat = sum(latency.values())
-    
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Severity", f"{severity}/5")
-    m2.metric("Escalation", "Yes" if escalate else "No")
-    m3.metric("Route", route)
-    m4.metric("Total Latency", f"{total_lat:.2f}s")
-    
-    st.divider()
-
-    # 3. Layout: Two Columns
-    col1, col2 = st.columns(2)
-
-    with col1:
-        # Execution Trace
-        st.subheader("🧠 Execution Trace")
-        # 直接顯示執行路徑
-        steps = ["retrieval", "eval"]
-        if eval_data.get("issue_type") == "ai_evaluation_failed": steps.append("dlq")
-        else: 
-            steps.append("response")
-            if escalate: steps.append("supervisor")
-        steps.append("audit")
-        st.caption(" → ".join([s.upper() for s in steps]))
-
-        # Risk Signals
-        st.subheader("🚨 Risk Signals")
-        signals = []
-        if "$500" in query or "$1000" in query: signals.append("High transaction value")
-        if "bank" in query.lower() or "payment" in query.lower(): signals.append("Payment-related risk")
-        if "disappeared" in query.lower() or "hacked" in query.lower(): signals.append("Fraud pattern detected")
-        if eval_data.get("trust_safety"): signals.append("Trust & Safety Violation")
-        
-        for s in signals: st.warning(s)
-
-        # Evidence
-        with st.expander("🔍 Retrieved Evidence"):
-            st.write("**Policies:**", final_state.get("support_contexts", []))
-            st.write("**Historical Logs:**", final_state.get("past_cases", []))
-
-    with col2:
-        # Customer Response
-        st.subheader("💬 Customer Response")
-        st.info(final_state.get("customer_response", "N/A"))
-        
-        # Supervisor Decision
-        if escalate:
-            st.subheader("🧑‍💼 Supervisor Decision")
-            st.warning(f"**Action:** {sup_data.get('action')}")
-            st.write(f"**Notes:** {sup_data.get('internal_notes')}")
-        
-        # Telemetry JSON
-        with st.expander("📊 Full Telemetry State"):
-            st.json(final_state)
+    # 這裡顯示最終報告
+    render_telemetry(final_state)
