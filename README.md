@@ -34,10 +34,7 @@ ai-powered-customer-support-triage/
 ├── production.py                # Core application logic: state, schemas, and agent nodes
 │
 ├── notebooks/
-│   └── ResolveFlow_AI_v3.ipynb  # Full orchestration logic, prompts, and benchmarks
-│
-├── data/
-│   └── test_cases.py            # Routine and escalation test scenarios
+│   └── ResolveFlow_AI.ipynb  # Full orchestration logic, prompts, and benchmarks
 │
 ├── docs/
 │   ├── architecture.png         # Agent routing and topology
