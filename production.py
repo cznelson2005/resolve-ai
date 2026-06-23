@@ -109,7 +109,7 @@ def embed_query(text: str) -> list[float]:
 # =====================================================================
 # 3. AGENT NODES (WITH PRODUCTION TRY-EXCEPT & LATENCY TRACKING)
 # =====================================================================
-def retrieval_node(state: TicketState) -> dict:
+def retrieval_node(state: TicketState, match_threshold = 0.85) -> dict:
     """Searches Pinecone across two namespaces."""
     start_time = time.time()
     metrics = state.get("latency_metrics", {})
@@ -127,6 +127,7 @@ def retrieval_node(state: TicketState) -> dict:
         support_contexts = [
             {"source": "support-docs", **match.get("metadata", {})}
             for match in doc_results.get("matches", [])
+            if match.get("score", 0) >= match_threshold
         ]
 
         # Search action-logs
