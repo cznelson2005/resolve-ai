@@ -1,0 +1,21 @@
+### 🔀 Agent Pipeline Topology
+
+```mermaid
+graph TD
+    A[User Query + Marketplace Context] --> B[retrieval_node: Dual-Namespace RAG]
+    B --> C[evaluation_node: Risk & Severity Scoring]
+    
+    C -->|Crash / Fraud Detected| D[human_review_node: DLQ / Manual Triage]
+    C -->|Normal Execution| E[response_node: Empathetic Customer Reply]
+    
+    D --> H[audit_node: Final System Telemetry Log]
+    
+    E -->|Low Severity 1-2| H
+    E -->|High Severity >= 4| F[supervisor_node: Risk Supervisor Decision]
+    
+    F --> H
+    H --> I([END: Sync to Pinecone DB])
+    
+    style D fill:#ffcccc,stroke:#ff0000,stroke-width:2px
+    style E fill:#ccffcc,stroke:#00aa00,stroke-width:2px
+    style F fill:#ffeebb,stroke:#ffaa00,stroke-width:2px
