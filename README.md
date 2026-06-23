@@ -1,19 +1,13 @@
-````markdown
-# 🛡️ ResolveFlow AI: Multi-Agent Customer Support Triage System
+# ResolveFlow AI
 
-**A Production-Style Dispute Triage Pipeline Built with LangGraph, Gemini 2.5 Flash, and Pinecone**
+**Multi-Agent Customer Support Triage System for Marketplace Disputes**
 
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/release/python-3100/)
-[![Streamlit](https://img.shields.io/badge/Streamlit-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io)
-[![LangGraph](https://img.shields.io/badge/LangGraph-000000?logo=chainlink&logoColor=white)](#)
-[![Gemini](https://img.shields.io/badge/Gemini_2.5_Flash-8E75B2?logo=google&logoColor=white)](#)
-[![Pinecone](https://img.shields.io/badge/Pinecone-Vector_DB-black)](#)
-
-> **Live Demo:** [Insert your Streamlit Community Cloud URL here]
+> Built with LangGraph, Gemini 2.5 Flash, Pinecone, and Streamlit
+> Live Demo: [Insert your Streamlit Community Cloud URL here]
 
 ---
 
-## 📌 Project Overview
+## Project Overview
 
 C2C marketplace support teams need to resolve routine issues at scale while also detecting high-risk Trust & Safety cases such as fraud, off-platform payment attempts, account compromise, and high-value transaction disputes.
 
@@ -23,13 +17,13 @@ Simple FAQ bots or single-prompt LLM flows are not enough for this type of workf
 
 The pipeline is designed around three practical support operations goals:
 
-- Reduce unnecessary LLM calls for low-risk routine cases.
-- Escalate high-risk marketplace disputes using explicit rules.
-- Prevent silent failures by routing system errors or uncertain cases to manual review.
+* Reduce unnecessary LLM calls for low-risk routine cases.
+* Escalate high-risk marketplace disputes using explicit rules.
+* Prevent silent failures by routing system errors or uncertain cases to manual review.
 
 ---
 
-## 🗂️ Repository Structure
+## Repository Structure
 
 ```text
 ai-powered-customer-support-triage/
@@ -39,27 +33,27 @@ ai-powered-customer-support-triage/
 ├── app.py                       # Streamlit dashboard and LangGraph runtime
 ├── production.py                # Core application logic: state, schemas, and agent nodes
 │
-├── notebooks/                   # Research and experimental development
+├── notebooks/
 │   └── ResolveFlow_AI_v3.ipynb  # Full orchestration logic, prompts, and benchmarks
 │
-├── data/                        # Simulation and regression testing
-│   └── test_cases.py            # Standardized routine and escalation scenarios
+├── data/
+│   └── test_cases.py            # Routine and escalation test scenarios
 │
-├── docs/                        # System design assets
+├── docs/
 │   ├── architecture.png         # Agent routing and topology
 │   └── evaluation_results.png   # Latency and benchmark charts
 │
-└── deck/                        # Executive case study presentation
+└── deck/
     └── Customer_Support_Triage.pdf
-````
+```
 
 ---
 
-## 🚀 Key Features
+## Key Features
 
 ### 1. Dual-Namespace RAG
 
-The system retrieves relevant context from two Pinecone namespaces:
+The system retrieves context from two Pinecone namespaces:
 
 * `support-docs`: Platform policies, refund rules, and resolution criteria.
 * `action-logs`: Historical supervisor decisions and prior case outcomes.
@@ -72,7 +66,7 @@ This separates static policy knowledge from operational memory, allowing agents 
 
 The evaluation node combines structured LLM reasoning with deterministic business rules.
 
-Examples of escalation logic include:
+Example escalation logic:
 
 * High-value disputes are assigned a higher minimum severity.
 * Users with repeated past disputes receive an additional risk adjustment.
@@ -98,45 +92,41 @@ When the system cannot safely complete the automated flow, the case is routed to
 
 ---
 
-## 🔀 Agent Pipeline Topology
+## Agent Pipeline
 
 ```mermaid
 graph TD
-    A[User Query + Marketplace Context] --> B[retrieval_node: Dual-Namespace RAG]
-    B --> C[evaluation_node: Risk & Severity Scoring]
+    A[User Query + Marketplace Context] --> B[Retrieval Node]
+    B --> C[Evaluation Node]
 
-    C -->|System Error or Critical Risk| D[human_review_node: Manual Review]
-    C -->|Normal Case| E[response_node: Customer Reply]
+    C -->|System Error or Critical Risk| D[Human Review Node]
+    C -->|Normal Case| E[Response Node]
 
-    E -->|Low Severity| H[audit_node: Final Log]
-    E -->|High Severity| F[supervisor_node: Review Decision]
+    E -->|Low Severity| H[Audit Node]
+    E -->|High Severity| F[Supervisor Node]
 
     D --> H
     F --> H
     H --> I([END])
-
-    style D fill:#ffcccc,stroke:#ff0000,stroke-width:2px
-    style E fill:#ccffcc,stroke:#00aa00,stroke-width:2px
-    style F fill:#ffeebb,stroke:#ffaa00,stroke-width:2px
 ```
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
-| Layer           | Tools                                     |
-| --------------- | ----------------------------------------- |
-| Orchestration   | LangGraph                                 |
-| LLM             | Gemini 2.5 Flash                          |
-| Embeddings      | Google GenAI SDK / `gemini-embedding-001` |
-| Vector Database | Pinecone                                  |
-| Data Validation | Pydantic v2                               |
-| UI              | Streamlit                                 |
-| Language        | Python 3.10+                              |
+| Layer           | Tools            |
+| --------------- | ---------------- |
+| Orchestration   | LangGraph        |
+| LLM             | Gemini 2.5 Flash |
+| Embeddings      | Google GenAI SDK |
+| Vector Database | Pinecone         |
+| Data Validation | Pydantic         |
+| UI              | Streamlit        |
+| Language        | Python 3.10+     |
 
 ---
 
-## 💻 Local Setup
+## Local Setup
 
 ### 1. Clone the repository
 
@@ -166,7 +156,7 @@ streamlit run app.py
 
 ---
 
-## 🧪 Test Scenarios
+## Test Scenarios
 
 The project includes simulated marketplace support cases covering both routine and high-risk flows:
 
@@ -174,21 +164,21 @@ The project includes simulated marketplace support cases covering both routine a
 * Low-value delivery dispute
 * High-value transaction dispute
 * Off-platform payment attempt
-* Account compromise / hacking signal
+* Account compromise signal
 * Repeated dispute history
 
 These scenarios are used to validate routing behavior, escalation logic, and fallback handling.
 
 ---
 
-## 🗺️ Future Improvements
+## Future Improvements
 
 | Priority | Item                    | Rationale                                                                            |
 | -------- | ----------------------- | ------------------------------------------------------------------------------------ |
 | P0       | PII Redaction Layer     | Mask sensitive customer data before sending content to the LLM.                      |
 | P0       | FastAPI Endpoint        | Expose the LangGraph workflow as an async service.                                   |
 | P1       | CRM Integration         | Sync outputs to Zendesk, Freshdesk, or another ticketing platform.                   |
-| P1       | Human Feedback Loop     | Use manual review outcomes to improve future severity classification.                |
+| P1       | Human Feedback Loop     | Use manual review outcomes to improve severity classification.                       |
 | P1       | Observability Dashboard | Track latency, escalation rate, fallback rate, and token usage.                      |
 | P2       | Multilingual Support    | Support mixed-language marketplace messages such as Singlish, Bahasa, or Thai.       |
 | P2       | Hybrid Search           | Combine dense vector retrieval with keyword search for exact order IDs or SKU terms. |
@@ -199,7 +189,7 @@ These scenarios are used to validate routing behavior, escalation logic, and fal
 
 This project demonstrates how LLM workflows can be designed for operational decision-making instead of simple chatbot responses.
 
-The focus is not just answer generation, but also:
+The focus is not only answer generation, but also:
 
 * Structured state management
 * Retrieval-grounded reasoning
@@ -208,7 +198,19 @@ The focus is not just answer generation, but also:
 * Human fallback design
 * Support operations safety
 
-*Built as a portfolio project to demonstrate practical multi-agent workflow design for marketplace customer support operations.*
+---
 
-```
-```
+## Project Positioning
+
+This project was built as a portfolio case study to demonstrate practical multi-agent workflow design for marketplace customer support operations.
+
+It reflects problems commonly found in real support environments:
+
+* High ticket volume
+* Inconsistent manual routing
+* Repeated policy lookups
+* Trust & Safety escalation risks
+* Cost and latency constraints in LLM workflows
+* Need for human review on uncertain or high-impact cases
+
+The goal is not to build a generic chatbot, but to show how an LLM-based workflow can be structured with retrieval, rules, routing logic, and fallback design.
