@@ -42,7 +42,7 @@ ESCALATION_CONFIG = {
     "past_dispute_threshold"  : 2,     # past disputes > this -> add 1 severity
     "seller_rating_threshold" : 3.0,   # rating < this + buyer -> flag trust_safety
     "high_value_threshold"    : 200,   # transaction > this + dispute -> min severity 4
-    "log_similarity_threshold": 0.81,  # min cosine score to retrieve past cases
+    "log_similarity_threshold": 0.75,  # min cosine score to retrieve past cases
 }
 
 # =====================================================================
@@ -70,6 +70,9 @@ class TicketState(TypedDict, total=False):
     # Production telemetry for UI
     latency_metrics   : Dict[str, float]
     errors            : List[str]
+
+    #pincone similary threshold
+    threshold         : float
 
 # Pydantic schemas from V3 Notebook
 class EvaluationSchema(BaseModel):
@@ -109,15 +112,15 @@ def embed_query(text: str) -> list[float]:
 # =====================================================================
 # 3. AGENT NODES (WITH PRODUCTION TRY-EXCEPT & LATENCY TRACKING)
 # =====================================================================
-def retrieval_node(state: TicketState, match_threshold = 0.7) -> dict:
+def retrieval_node(state: TicketState) -> dict:
     """Searches Pinecone across two namespaces."""
     start_time = time.time()
     metrics = state.get("latency_metrics", {})
     error_logs = state.get("errors", [])
+    threshold = state.get("threshold", ESCALATION_CONFIG["log_similarity_threshold"])
     
     try:
         query_vector = embed_query(state.get("query", ""))
-        threshold = ESCALATION_CONFIG["log_similarity_threshold"]
 
         # Search support-docs
         doc_results = pinecone_index.query(
@@ -127,7 +130,7 @@ def retrieval_node(state: TicketState, match_threshold = 0.7) -> dict:
         support_contexts = [
             {"source": "support-docs", **match.get("metadata", {})}
             for match in doc_results.get("matches", [])
-            if match.get("score", 0) >= match_threshold
+            if match.get("score", 0) >= threshold
         ]
 
         # Search action-logs
