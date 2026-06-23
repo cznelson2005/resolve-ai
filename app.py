@@ -78,11 +78,24 @@ def render_telemetry(final_state):
     st.subheader("📚 Retrieved Evidence")
     e1, e2 = st.columns(2)
     with e1:
-        st.write("**Policy Matches**")
-        for ctx in support_contexts[:2]: st.expander(f"{ctx.get('intent', 'Policy')}").write(ctx.get("response", ""))
+        st.write("**Support Policy Matches**")
+        # 檢查是否為空，若空則顯示提示
+        if final_state.get("support_contexts"):
+            for i, ctx in enumerate(final_state["support_contexts"][:3], start=1):
+                with st.expander(f"{i}. {ctx.get('intent', 'Policy')}"):
+                    st.write(f"**Source:** `{ctx.get('source', 'N/A')}`")
+                    st.write(ctx.get("response", "No response text available."))
+        else:
+            st.caption("⚠️ No relevant policies found (Similarity score below threshold).")
     with e2:
-        st.write("**Past Action Logs**")
-        for case in past_cases[:2]: st.expander(f"Case Match").json(case)
+        st.write("**Historical Case Matches**")
+        # 檢查是否為空
+        if final_state.get("past_cases"):
+            for i, case in enumerate(final_state["past_cases"][:3], start=1):
+                with st.expander(f"Historical Case {i} (Score: {case.get('score')})"):
+                    st.json(case)
+        else:
+            st.caption("⚠️ No relevant historical cases found.")
 
 # --- UI 渲染 ---
 st.set_page_config(layout="wide", page_title="ResolveFlow AI")
