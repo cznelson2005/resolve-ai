@@ -66,7 +66,7 @@ st.title("🛡️ ResolveFlow AI — Support Triage Simulator")
 
 # Sidebar Configuration
 st.sidebar.subheader("⚙️ System Configuration")
-similarity_threshold = st.sidebar.slider(
+sim_threshold = st.sidebar.slider(
     "Similarity Threshold", 
     min_value=0.50, 
     max_value=0.99, 
