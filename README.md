@@ -33,7 +33,7 @@ ai-powered-customer-support-triage/
 ├── app.py                       # Streamlit dashboard and LangGraph runtime
 ├── production.py                # Core application logic: state, schemas, and agent nodes
 │
-├── notebooks/
+├── code/
 │   └── ResolveFlow_AI.ipynb  # Full orchestration logic, prompts, and benchmarks
 │
 ├── docs/
