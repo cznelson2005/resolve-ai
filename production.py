@@ -109,7 +109,7 @@ def embed_query(text: str) -> list[float]:
 # =====================================================================
 # 3. AGENT NODES (WITH PRODUCTION TRY-EXCEPT & LATENCY TRACKING)
 # =====================================================================
-def retrieval_node(state: TicketState, match_threshold = 0.85) -> dict:
+def retrieval_node(state: TicketState, match_threshold = 0.7) -> dict:
     """Searches Pinecone across two namespaces."""
     start_time = time.time()
     metrics = state.get("latency_metrics", {})
