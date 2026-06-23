@@ -3,5 +3,5 @@ langgraph>=0.0.26
 langchain-core>=0.1.52
 langchain-google-genai>=1.0.3
 google-genai>=0.3.0
-pinecone-client>=3.1.0
+pinecone>=4.0.0
 pydantic>=2.5.0
