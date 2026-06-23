@@ -66,7 +66,13 @@ st.title("🛡️ ResolveFlow AI — Support Triage Simulator")
 
 # Sidebar Configuration
 st.sidebar.subheader("⚙️ System Configuration")
-sim_threshold = st.sidebar.slider("Similarity Threshold", 0.50, 0.99, 0.81, 0.01)
+similarity_threshold = st.sidebar.slider(
+    "Similarity Threshold", 
+    min_value=0.50, 
+    max_value=0.99, 
+    value=0.70,
+    step=0.01
+)
 
 SCENARIOS = {
     "High-Value Watch Scam": "I made a $500 payment and the seller disappeared.",
