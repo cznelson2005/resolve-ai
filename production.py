@@ -51,7 +51,8 @@ ESCALATION_CONFIG = {
 class TicketState(TypedDict, total=False):
     # Input fields
     query             : str
-    chat_history      : str
+    chat_history      : str        #long term meory
+    recent_context    : str        #for Pinecone
     user_type         : str        # buyer | seller | platform | unknown
     transaction_value : float
     seller_rating     : float
@@ -118,10 +119,10 @@ def retrieval_node(state: TicketState) -> dict:
     
     try:
         search_text = state.get("query", "")
-        history = state.get("chat_history", "")
-        if history:
+        recent_ctx = state.get("recent_context", "")
+        if recent_ctx:
             # Combine historical questions and latest queries
-            search_text = f"Context: {history}\nCustomer Query: {search_text}"
+            search_text = f"Context: {recent_ctx}\nCustomer Query: {search_text}"
         
         query_vector = embed_query(search_text)
         threshold = ESCALATION_CONFIG["log_similarity_threshold"]

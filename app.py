@@ -158,7 +158,7 @@ with st.sidebar:
     )
     similarity_threshold = st.slider(
         "Similarity Threshold (past cases)",
-        min_value=0.50, max_value=0.99, value=0.7, step=0.01,
+        min_value=0.50, max_value=0.99, value=0.81, step=0.01,
         help="Minimum cosine similarity to retrieve a past case"
     )
 
@@ -468,8 +468,10 @@ if query:
         speaker = "Customer" if msg["role"] == "user" else "Agent"
         history_lines.append(f"{speaker}: {msg['content']}")
         
-    # extract the latest 4 conversations
-    chat_history_str = "\n".join(history_lines[-4:])
+    # extract past 20 histories
+    full_history_str = "\n".join(history_lines[-20:]) 
+    # For Pinecone indexing（only keep 1-2 sentense for phrase indexing）
+    recent_context_str = "\n".join(history_lines[-2:])
 
     with st.spinner("🤖 Running pipeline..."):
         # Simulate tool calls first (visual effect)
@@ -483,7 +485,8 @@ if query:
         state   = pipeline.invoke(
             {
                 "query"            : query,
-                "chat_history"     : chat_history_str,  #pass historical records
+                "chat_history"     : full_history_str,  #pass historical records
+                "recent_context"   : recent_context_str,
                 "user_type"        : user_type,
                 "transaction_value": float(transaction_value),
                 "seller_rating"    : float(seller_rating),
