@@ -461,6 +461,16 @@ if query:
         "meta"   : None
     })
 
+    #Extract previous conversation 
+    history_lines = []
+    # [:-1] excludes the latest query
+    for msg in st.session_state.conversation[:-1]:
+        speaker = "Customer" if msg["role"] == "user" else "Agent"
+        history_lines.append(f"{speaker}: {msg['content']}")
+        
+    # extract the latest 4 conversations
+    chat_history_str = "\n".join(history_lines[-4:])
+
     with st.spinner("🤖 Running pipeline..."):
         # Simulate tool calls first (visual effect)
         tool_calls = simulate_tool_calls(
@@ -473,13 +483,13 @@ if query:
         state   = pipeline.invoke(
             {
                 "query"            : query,
+                "chat_history"     : chat_history_str,  #pass historical records
                 "user_type"        : user_type,
                 "transaction_value": float(transaction_value),
                 "seller_rating"    : float(seller_rating),
                 "past_disputes"    : int(past_disputes),
                 "latency_metrics"  : {},
-                "errors"           : [],
-                "messages"         : []
+                "errors"           : []
             },
             config={"configurable": {"thread_id": st.session_state.thread_id}}
         )

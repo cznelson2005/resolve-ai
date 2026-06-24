@@ -42,7 +42,7 @@ ESCALATION_CONFIG = {
     "past_dispute_threshold"  : 2,     # past disputes > this -> add 1 severity
     "seller_rating_threshold" : 3.0,   # rating < this + buyer -> flag trust_safety
     "high_value_threshold"    : 200,   # transaction > this + dispute -> min severity 4
-    "log_similarity_threshold": 0.75,  # min cosine score to retrieve past cases
+    "log_similarity_threshold": 0.81,  # min cosine score to retrieve past cases
 }
 
 # =====================================================================
@@ -51,6 +51,7 @@ ESCALATION_CONFIG = {
 class TicketState(TypedDict, total=False):
     # Input fields
     query             : str
+    chat_history      : str
     user_type         : str        # buyer | seller | platform | unknown
     transaction_value : float
     seller_rating     : float
@@ -70,9 +71,6 @@ class TicketState(TypedDict, total=False):
     # Production telemetry for UI
     latency_metrics   : Dict[str, float]
     errors            : List[str]
-
-    #pincone similary threshold
-    threshold         : float
 
 # Pydantic schemas from V3 Notebook
 class EvaluationSchema(BaseModel):
@@ -117,10 +115,16 @@ def retrieval_node(state: TicketState) -> dict:
     start_time = time.time()
     metrics = state.get("latency_metrics", {})
     error_logs = state.get("errors", [])
-    threshold = state.get("threshold", ESCALATION_CONFIG["log_similarity_threshold"])
     
     try:
-        query_vector = embed_query(state.get("query", ""))
+        search_text = state.get("query", "")
+        history = state.get("chat_history", "")
+        if history:
+            # Combine historical questions and latest queries
+            search_text = f"Context: {history}\nCustomer Query: {search_text}"
+        
+        query_vector = embed_query(search_text)
+        threshold = ESCALATION_CONFIG["log_similarity_threshold"]
 
         # Search support-docs
         doc_results = pinecone_index.query(
@@ -130,7 +134,6 @@ def retrieval_node(state: TicketState) -> dict:
         support_contexts = [
             {"source": "support-docs", **match.get("metadata", {})}
             for match in doc_results.get("matches", [])
-            if match.get("score", 0) >= threshold
         ]
 
         # Search action-logs
@@ -185,7 +188,10 @@ def evaluation_node(state: TicketState) -> dict:
     prompt = f"""
 You are a customer support evaluation specialist for a C2C marketplace.
 
-CUSTOMER QUERY: {state.get('query', '')}
+PREVIOUS CONVERSATION HISTORY:
+{state.get('chat_history', 'None')}
+
+CURRENT CUSTOMER QUERY: {state.get('query', '')}
 
 RETRIEVED SIMILAR SUPPORT CASES (for context):
 {context_text}
@@ -298,7 +304,10 @@ Keep your response to 3-5 sentences. Do not mention internal severity scores.
 RETRIEVED CONTEXT:
 {context_text}
 
-CUSTOMER QUERY: {state.get('query', '')}
+PREVIOUS CONVERSATION HISTORY:
+{state.get('chat_history', 'None')}
+
+CURRENT CUSTOMER QUERY: {state.get('query', '')}
 CUSTOMER SENTIMENT: {eval_data.get('sentiment', 'neutral')}
 YOUR RESPONSE:"""
 
