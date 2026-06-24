@@ -158,7 +158,7 @@ with st.sidebar:
     )
     similarity_threshold = st.slider(
         "Similarity Threshold (past cases)",
-        min_value=0.50, max_value=0.99, value=0.81, step=0.01,
+        min_value=0.50, max_value=0.99, value=0.7, step=0.01,
         help="Minimum cosine similarity to retrieve a past case"
     )
 
