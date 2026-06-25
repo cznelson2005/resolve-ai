@@ -251,27 +251,18 @@ with st.sidebar:
         st.session_state.last_state   = None
         st.rerun()
 
-# 放在 sidebar 最底部
-if st.sidebar.button("🔍 Debug Token Format"):
-    from production import eval_llm, _extract_tokens
+st.divider()
     
-    test_result = eval_llm.invoke("Hello, what is 1+1?")
-    raw_msg     = test_result["raw"]
-    
-    st.sidebar.write("**usage_metadata:**")
-    st.sidebar.json(
-        dict(raw_msg.usage_metadata) 
-        if hasattr(raw_msg, "usage_metadata") and raw_msg.usage_metadata 
-        else {"result": "NOT FOUND"}
-    )
-    
-    st.sidebar.write("**response_metadata:**")
-    st.sidebar.json(
-        dict(raw_msg.response_metadata)
-        if hasattr(raw_msg, "response_metadata") and raw_msg.response_metadata
-        else {"result": "NOT FOUND"}
-    )
-
+    # --- Debug Token Tools ---
+    st.subheader("🔍 Debug Tools")
+    if st.button("Inspect Last State Data"):
+        if st.session_state.last_state:
+            st.write("Last Token Metrics:")
+            st.json(st.session_state.last_state.get("token_metrics", {}))
+            st.write("Raw Token Count Found?")
+            # This helps check if the state is actually receiving the data
+        else:
+            st.warning("Please run a query first!")
 # =====================================================================
 # SCENARIO PRESETS
 # =====================================================================
