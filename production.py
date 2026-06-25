@@ -287,7 +287,13 @@ def human_review_node(state: TicketState) -> dict:
     }
 
     metrics["human_review_node"] = round(time.time() - start_time, 2)
-    return {"customer_response": canned_response, "evaluation": updated_eval, "supervisor_decision": supervisor_dec, "latency_metrics": metrics}
+    return {
+        "customer_response"  : canned_response,
+        "evaluation"         : updated_eval,
+        "supervisor_decision": supervisor_dec,
+        "latency_metrics"    : metrics,
+        "token_metrics"      : state.get("token_metrics", {"input": 0, "output": 0, "total": 0})
+    }
 
 
 def response_node(state: TicketState) -> dict:
@@ -351,10 +357,14 @@ def supervisor_node(state: TicketState) -> dict:
 
     if not eval_data.get("escalate"):
         metrics["supervisor_node"] = round(time.time() - start_time, 2)
-        return {"supervisor_decision": {
-            "escalated": False, "action": "none", "compensation": "none",
-            "assigned_to": "none", "priority": "normal", "internal_notes": "Automated resolution."
-        }, "latency_metrics": metrics}
+        return {
+            "supervisor_decision": {
+                "escalated": False, "action": "none", "compensation": "none",
+                "assigned_to": "none", "priority": "normal", "internal_notes": "Automated resolution."
+            },
+            "latency_metrics": metrics,
+            "token_metrics"  : tokens    # ← pass through accumulated tokens
+        }
 
     past_cases_text = "\n".join([
         f"- Severity {c.get('severity')} | {c.get('query', '')[:50]} -> {c.get('actions_taken', '')}"
@@ -465,19 +475,3 @@ def audit_node(state: TicketState) -> dict:
         "token_metrics"      : state.get("token_metrics", {"input": 0, "output": 0, "total": 0}),  # ← 加這行
         "errors"             : error_logs
     }
-
-def debug_token_format():
-    test_result = eval_llm.invoke("Hello, what is 1+1?")
-    raw_msg     = test_result["raw"]
-    
-    print("=== include_raw result keys ===")
-    print(test_result.keys())
-    
-    print("\n=== raw AIMessage type ===")
-    print(type(raw_msg))
-    
-    print("\n=== usage_metadata ===")
-    print(getattr(raw_msg, "usage_metadata", "NOT FOUND"))
-    
-    print("\n=== response_metadata ===")
-    print(getattr(raw_msg, "response_metadata", "NOT FOUND"))
