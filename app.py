@@ -17,6 +17,11 @@ st.set_page_config(
     layout="wide"
 )
 
+password = st.text_input("Enter access password", type="password")
+if password != st.secrets.get("APP_PASSWORD", ""):
+    st.warning("Please enter the correct password to access this app.")
+    st.stop()
+
 # --- INJECT RESPONSIVE CSS ---
 # This custom CSS uses clamp() and viewport units (vw) to dynamically 
 # scale fonts and spacing based on the browser window size, preventing 
