@@ -3,7 +3,7 @@
 **Multi-Agent Customer Support Triage System for Marketplace Disputes**
 
 > Built with LangGraph, Gemini 2.5 Flash, Pinecone, and Streamlit
-> Live Demo: [Insert your Streamlit Community Cloud URL here]
+> Live Demo: [https://ai-powered-customer-support-triage-h9vv2fxuwvhud9xc5jmfn4.streamlit.app/] (Reach out for password!)
 
 ---
 
