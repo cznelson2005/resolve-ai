@@ -496,6 +496,23 @@ with right_col:
                 for e in errors:
                     st.error(e)
 
+            # Price rate 寫死（根據 Google 官方定價）
+            INPUT_PRICE_PER_M  = 0.15   # $0.15 per 1M input tokens
+            OUTPUT_PRICE_PER_M = 0.60   # $0.60 per 1M output tokens
+
+            # 成本動態計算
+            input_cost  = (tokens.get("input", 0)  / 1_000_000) * INPUT_PRICE_PER_M
+            output_cost = (tokens.get("output", 0) / 1_000_000) * OUTPUT_PRICE_PER_M
+            total_cost  = input_cost + output_cost
+
+            col_t1, col_t2, col_t3, col_t4 = st.columns(4)
+            col_t1.metric("Input Tokens",  tokens.get("input", 0))
+            col_t2.metric("Output Tokens", tokens.get("output", 0))
+            col_t3.metric("Total Tokens",  tokens.get("total", 0))
+            col_t4.metric("Est. Cost",     f"${total_cost:.6f}")
+
+            st.caption("Gemini 2.5 Flash pricing: $0.15/1M input · $0.60/1M output")
+
         with tab4:
             ticket_data = {
                 "ticket_id"         : state.get("ticket_id", "—"),
