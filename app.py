@@ -317,12 +317,15 @@ with right_col:
         )
 
         total_latency = round(sum(metrics.values()), 2)
+        tokens = state.get("token_metrics", {"input": 0, "output": 0, "total": 0})
 
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2, col3, col4, col5, col6 = st.columns(6)
         col1.metric("Severity",      f"{sev_emoji} {sev} / 5")
         col2.metric("Escalation",    "Yes" if evaluation.get("escalate") else "No")
         col3.metric("Route",         route_label)
-        col4.metric("Total Latency", f"{total_latency}s")
+        col4.metric("Latency",       f"{total_latency}s")
+        col5.metric("Prompt Tks",    f"{tokens.get('input', 0)}")
+        col6.metric("Output Tks",    f"{tokens.get('output', 0)}")
 
         st.divider()
 
@@ -492,6 +495,7 @@ if query:
                 "seller_rating"    : float(seller_rating),
                 "past_disputes"    : int(past_disputes),
                 "latency_metrics"  : {},
+                "token_metrics"    : {"input": 0, "output": 0, "total": 0},
                 "errors"           : []
             },
             config={"configurable": {"thread_id": st.session_state.thread_id}}

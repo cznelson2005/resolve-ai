@@ -71,6 +71,7 @@ class TicketState(TypedDict, total=False):
     
     # Production telemetry for UI
     latency_metrics   : Dict[str, float]
+    token_metrics     : Dict[str, int]
     errors            : List[str]
 
 # Pydantic schemas from V3 Notebook
@@ -93,8 +94,8 @@ class SupervisorSchema(BaseModel):
     priority       : str = Field(description="normal|high|urgent")
     internal_notes : str = Field(description="max 10 words")
 
-eval_llm = lc_llm.with_structured_output(EvaluationSchema)
-supervisor_llm = lc_llm.with_structured_output(SupervisorSchema)
+eval_llm = lc_llm.with_structured_output(EvaluationSchema, include_raw=True)
+supervisor_llm = lc_llm.with_structured_output(SupervisorSchema, include_raw=True)
 
 # =====================================================================
 # 2. EMBEDDING FUNCTIONS
@@ -116,7 +117,7 @@ def retrieval_node(state: TicketState) -> dict:
     start_time = time.time()
     metrics = state.get("latency_metrics", {})
     error_logs = state.get("errors", [])
-    
+
     try:
         search_text = state.get("query", "")
         recent_ctx = state.get("recent_context", "")
@@ -219,10 +220,18 @@ Additional marketplace rules (apply AFTER base severity):
 - seller_rating < {rating_threshold} AND user_type = buyer -> set trust_safety = True
 - Off-platform payment OR account hacking mentioned -> severity 5 + trust_safety = True
 """
-
+    
+    tokens = state.get("token_metrics", {"input": 0, "output": 0, "total": 0})
+    
     try:
         result = eval_llm.invoke(prompt)
-        eval_dict = result.model_dump()
+        eval_dict = result["parsed"].model_dump()
+
+        usage = result["raw"].usage_metadata or {}
+        tokens["input"] += usage.get("input_tokens", 0)
+        tokens["output"] += usage.get("output_tokens", 0)
+        tokens["total"] += usage.get("total_tokens", 0)
+        
     except Exception as e:
         # Circuit breaker fallback triggers route_after_evaluation to DLQ
         eval_dict = {
@@ -239,7 +248,7 @@ Additional marketplace rules (apply AFTER base severity):
         error_logs.append(f"evaluation_error: {str(e)}")
 
     metrics["evaluation_node"] = round(time.time() - start_time, 2)
-    return {"evaluation": eval_dict, "latency_metrics": metrics, "errors": error_logs}
+    return {"evaluation": eval_dict, "latency_metrics": metrics, "token_metrics": tokens, "errors": error_logs}
 
 
 def human_review_node(state: TicketState) -> dict:
@@ -275,6 +284,7 @@ def human_review_node(state: TicketState) -> dict:
     }
 
     metrics["human_review_node"] = round(time.time() - start_time, 2)
+
     return {"customer_response": canned_response, "evaluation": updated_eval, "supervisor_decision": supervisor_dec, "latency_metrics": metrics}
 
 
@@ -311,16 +321,25 @@ PREVIOUS CONVERSATION HISTORY:
 CURRENT CUSTOMER QUERY: {state.get('query', '')}
 CUSTOMER SENTIMENT: {eval_data.get('sentiment', 'neutral')}
 YOUR RESPONSE:"""
+    
+    tokens = state.get("token_metrics", {"input": 0, "output": 0, "total": 0})
 
     try:
         response = lc_llm.invoke(prompt)
         answer = response.content.strip()
+
+        usage = response.usage_metadata or {}
+        tokens["input"] += usage.get("input_tokens", 0)
+        tokens["output"] += usage.get("output_tokens", 0)
+        tokens["total"] += usage.get("total_tokens", 0)
+
     except Exception as e:
         answer = "Thank you for contacting us. We've received your message and our team is looking into this. We'll get back to you as soon as possible."
         error_logs.append(f"response_error: {str(e)}")
 
     metrics["response_node"] = round(time.time() - start_time, 2)
-    return {"customer_response": answer, "latency_metrics": metrics, "errors": error_logs}
+
+    return {"customer_response": answer, "latency_metrics": metrics, "token_metrics": tokens, "errors": error_logs}
 
 
 def supervisor_node(state: TicketState) -> dict:
@@ -371,10 +390,17 @@ Decision guide:
 - Repeat issue in past cases   -> escalate_rca
 - Legal mentioned              -> assign legal_team
 """
-
+    tokens = state.get("token_metrics", {"input": 0, "output": 0, "total": 0})
+    
     try:
         result = supervisor_llm.invoke(prompt)
-        decision = result.model_dump()
+        decision = result["parsed"].model_dump()
+
+        usage = result["raw"].usage_metadata or {}
+        tokens["input"] += usage.get("input_tokens", 0)
+        tokens["output"] += usage.get("output_tokens", 0)
+        tokens["total"] += usage.get("total_tokens", 0)
+
     except Exception as e:
         decision = {
             "escalated"     : True,
@@ -387,7 +413,8 @@ Decision guide:
         error_logs.append(f"supervisor_error: {str(e)}")
 
     metrics["supervisor_node"] = round(time.time() - start_time, 2)
-    return {"supervisor_decision": decision, "latency_metrics": metrics, "errors": error_logs}
+    
+    return {"supervisor_decision": decision, "latency_metrics": metrics, "token_metrics": tokens, "errors": error_logs}
 
 
 def audit_node(state: TicketState) -> dict:
