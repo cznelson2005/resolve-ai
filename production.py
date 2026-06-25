@@ -111,21 +111,21 @@ def _extract_tokens(ai_msg) -> tuple[int, int, int]:
     Robustly extract tokens from LangChain AIMessage across different versions.
     Returns: (input_tokens, output_tokens, total_tokens)
     """
-    # 1. Try extracting from newer LangChain standard usage_metadata
+    # Method 1: LangChain standard usage_metadata
     if hasattr(ai_msg, "usage_metadata") and ai_msg.usage_metadata:
+        um = ai_msg.usage_metadata
         return (
-            ai_msg.usage_metadata.get("input_tokens", 0),
-            ai_msg.usage_metadata.get("output_tokens", 0),
-            ai_msg.usage_metadata.get("total_tokens", 0)
+            um.get("input_tokens", 0),
+            um.get("output_tokens", 0),
+            um.get("total_tokens", 0)
         )
-    # 2. Fallback: Extract from older/provider-specific response_metadata
+    # Method 2: Gemini-specific response_metadata (camelCase keys)
     if hasattr(ai_msg, "response_metadata") and ai_msg.response_metadata:
-        token_usage = ai_msg.response_metadata.get("token_usage", {})
-        # Note: These keys might be specific to Gemini's raw response formatting
+        usage = ai_msg.response_metadata.get("usageMetadata", {})
         return (
-            token_usage.get("prompt_token_count", 0),
-            token_usage.get("candidates_token_count", 0),
-            token_usage.get("total_token_count", 0)
+            usage.get("promptTokenCount", 0),       # ← camelCase
+            usage.get("candidatesTokenCount", 0),   # ← camelCase
+            usage.get("totalTokenCount", 0)         # ← camelCase
         )
     return 0, 0, 0
 
@@ -458,7 +458,13 @@ def audit_node(state: TicketState) -> dict:
 
     metrics["audit_node"] = round(time.time() - start_time, 2)
 
-    return {"ticket_id": ticket_id, "supervisor_decision": supervisor_decision, "latency_metrics": metrics, "errors": error_logs}
+    return {
+        "ticket_id"          : ticket_id,
+        "supervisor_decision": supervisor_decision,
+        "latency_metrics"    : metrics,
+        "token_metrics"      : state.get("token_metrics", {"input": 0, "output": 0, "total": 0}),  # ← 加這行
+        "errors"             : error_logs
+    }
 
 def debug_token_format():
     test_result = eval_llm.invoke("Hello, what is 1+1?")
@@ -475,5 +481,3 @@ def debug_token_format():
     
     print("\n=== response_metadata ===")
     print(getattr(raw_msg, "response_metadata", "NOT FOUND"))
-
-debug_token_format()

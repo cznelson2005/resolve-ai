@@ -204,7 +204,7 @@ with st.sidebar:
     )
 
     # Update live config
-    ESCALATION_CONFIG["high_value_threshold"]    = high_value
+    ESCALATION_CONFIG["high_value_threshold"]     = high_value
     ESCALATION_CONFIG["log_similarity_threshold"] = similarity_threshold
 
     st.divider()
@@ -250,17 +250,29 @@ with st.sidebar:
         st.session_state.conversation = []
         st.session_state.last_state   = None
         st.rerun()
-    
-    # --- Debug Token Tools ---
+
+    # ── Debug Tools ───────────────────────────────────────────
+    st.divider()
     st.subheader("🔍 Debug Tools")
-    if st.button("Inspect Last State Data"):
+    if st.button("Inspect Last State", use_container_width=True):
         if st.session_state.last_state:
-            st.write("Last Token Metrics:")
-            st.json(st.session_state.last_state.get("token_metrics", {}))
-            st.write("Raw Token Count Found?")
-            # This helps check if the state is actually receiving the data
+            st.write("**Token Metrics:**")
+            st.json(st.session_state.last_state.get(
+                "token_metrics", {}
+            ))
+            st.write("**Latency Metrics:**")
+            st.json(st.session_state.last_state.get(
+                "latency_metrics", {}
+            ))
+            st.write("**Errors:**")
+            errors = st.session_state.last_state.get("errors", [])
+            if errors:
+                for e in errors:
+                    st.error(e)
+            else:
+                st.success("No errors")
         else:
-            st.warning("Please run a query first!")
+            st.warning("Run a query first!")
 
 st.divider()
 # =====================================================================
@@ -538,19 +550,22 @@ if query:
 
         # Run actual pipeline
         t_start = time.time()
-        state   = pipeline.invoke(
-            {
-                "query"            : query,
-                "chat_history"     : full_history_str,  #pass historical records
-                "recent_context"   : recent_context_str,
-                "user_type"        : user_type,
-                "transaction_value": float(transaction_value),
-                "seller_rating"    : float(seller_rating),
-                "past_disputes"    : int(past_disputes),
-                "latency_metrics"  : {},
-                "token_metrics"    : {"input": 0, "output": 0, "total": 0},
-                "errors"           : []
-            },
+
+        initial_state = {
+            "query"            : query,
+            "chat_history"     : full_history_str,
+            "recent_context"   : recent_context_str,
+            "user_type"        : user_type,
+            "transaction_value": float(transaction_value),
+            "seller_rating"    : float(seller_rating),
+            "past_disputes"    : int(past_disputes),
+            "latency_metrics"  : {},
+            "token_metrics"    : {"input": 0, "output": 0, "total": 0},
+            "errors"           : []
+        }
+        
+        state = pipeline.invoke(
+            initial_state,
             config={"configurable": {"thread_id": st.session_state.thread_id}}
         )
 
