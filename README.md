@@ -36,10 +36,6 @@ ai-powered-customer-support-triage/
 ├── code/
 │   └── ResolveFlow_AI.ipynb  # Full orchestration logic, prompts, and benchmarks
 │
-├── docs/
-│   ├── architecture.png         # Agent routing and topology
-│   └── evaluation_results.png   # Latency and benchmark charts
-│
 └── deck/
     └── Customer_Support_Triage.pdf
 ```
