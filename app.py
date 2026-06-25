@@ -541,28 +541,43 @@ with right_col:
 # PIPELINE EXECUTION
 # =====================================================================
 if query:
-    # ── 1. 立刻把用戶訊息加進 conversation ──────────────────
+    # ── 1. Append user message to conversation history ───────
     st.session_state.conversation.append({
         "role"   : "user",
         "content": query,
         "meta"   : None
     })
 
-    # ── 2. 立刻顯示用戶訊息（不等 pipeline）────────────────
+    # ── 2. Build conversation history strings ────────────────
+    # Must be defined BEFORE pipeline invoke
+    # Excludes the latest message [:-1] to avoid self-reference
+    history_lines = []
+    for msg in st.session_state.conversation[:-1]:
+        speaker = "Customer" if msg["role"] == "user" else "Agent"
+        history_lines.append(f"{speaker}: {msg['content']}")
+
+    full_history_str   = "\n".join(history_lines[-20:])  # last 20 turns
+    recent_context_str = "\n".join(history_lines[-2:])   # last 2 turns for Pinecone indexing
+
+    # ── 3. Immediately render user message (before pipeline) ─
     with chat_container:
         with st.chat_message("user"):
             st.markdown(query.replace("$", "\\$"))
 
-    # ── 3. 顯示 spinner 並跑 pipeline ───────────────────────
+    # ── 4. Run pipeline inside assistant bubble ───────────────
+    # Spinner appears inside the assistant chat bubble while pipeline runs
     with chat_container:
         with st.chat_message("assistant"):
             with st.spinner("Analysing your issue..."):
+
+                # Simulate Carousell backend tool calls
                 tool_calls = simulate_tool_calls(
                     query, user_type, transaction_value,
                     seller_rating, past_disputes
                 )
-                time.sleep(0.3)
+                time.sleep(0.3)  # brief pause for visual realism
 
+                # Run the actual LangGraph pipeline
                 t_start = time.time()
                 state   = pipeline.invoke(
                     {
@@ -581,16 +596,17 @@ if query:
                     config={"configurable": {"thread_id": st.session_state.thread_id}}
                 )
 
+                # Attach tool calls and query to state for display in results panel
                 state["tool_calls_simulated"] = tool_calls
                 state["query"]                = query
                 total_latency = round(time.time() - t_start, 2)
 
-            # ── 4. Pipeline 跑完後顯示回應 ──────────────────
+            # ── 5. Display assistant response once pipeline completes
             response   = state.get("customer_response", "Sorry, something went wrong.")
             evaluation = state.get("evaluation", {})
             st.markdown(response.replace("$", "\\$"))
 
-    # ── 5. 把 assistant 回應加進 conversation ───────────────
+    # ── 6. Append assistant response to conversation history ──
     st.session_state.conversation.append({
         "role"   : "assistant",
         "content": response,
@@ -601,5 +617,6 @@ if query:
         }
     })
 
+    # ── 7. Save final state and rerun to update results panel ─
     st.session_state.last_state = state
     st.rerun()
