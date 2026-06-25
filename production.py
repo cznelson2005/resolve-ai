@@ -16,14 +16,13 @@ from pinecone import Pinecone
 # =====================================================================
 # 0. INITIALIZE API CLIENTS & CONFIG
 # =====================================================================
-# Load keys from environment variables (Required for Streamlit deployment)
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 PINECONE_API_KEY = os.environ.get("PINECONE_API_KEY")
 
 # Initialize Native GenAI Client for Embeddings
 client = genai.Client(api_key=GEMINI_API_KEY)
 
-# Initialize LangChain LLM (Using gemini-2.5-flash as specified in notebook)
+# Initialize LangChain LLM
 lc_llm = ChatGoogleGenerativeAI(
     model="gemini-2.5-flash",
     temperature=0,
@@ -37,28 +36,26 @@ NAMESPACE_DOCS = "support-docs"
 NAMESPACE_LOGS = "action-logs"
 pinecone_index = pc.Index(INDEX_NAME)
 
-# Escalation config matching the notebook business rules
+# Escalation config
 ESCALATION_CONFIG = {
-    "past_dispute_threshold"  : 2,     # past disputes > this -> add 1 severity
-    "seller_rating_threshold" : 3.0,   # rating < this + buyer -> flag trust_safety
-    "high_value_threshold"    : 200,   # transaction > this + dispute -> min severity 4
-    "log_similarity_threshold": 0.81,  # min cosine score to retrieve past cases
+    "past_dispute_threshold"  : 2,     
+    "seller_rating_threshold" : 3.0,   
+    "high_value_threshold"    : 200,   
+    "log_similarity_threshold": 0.81,  
 }
 
 # =====================================================================
 # 1. STATE DEFINITION & STRUCTURED OUTPUT SCHEMAS
 # =====================================================================
 class TicketState(TypedDict, total=False):
-    # Input fields
     query             : str
-    chat_history      : str        #long term meory
-    recent_context    : str        #for Pinecone
-    user_type         : str        # buyer | seller | platform | unknown
+    chat_history      : str        
+    recent_context    : str        
+    user_type         : str        
     transaction_value : float
     seller_rating     : float
     past_disputes     : int
     
-    # Agent outputs
     support_contexts  : List[Dict[str, Any]]
     past_cases        : List[Dict[str, Any]]
     evaluation        : Dict[str, Any]
@@ -66,15 +63,12 @@ class TicketState(TypedDict, total=False):
     supervisor_decision: Dict[str, Any]
     ticket_id         : str
     
-    # Multi-turn conversation history
     messages          : Annotated[list[BaseMessage], add_messages]
     
-    # Production telemetry for UI
     latency_metrics   : Dict[str, float]
-    token_metrics     : Dict[str, int]
+    token_metrics     : Dict[str, int]   # <--- 新增追蹤 Token 的狀態
     errors            : List[str]
 
-# Pydantic schemas from V3 Notebook
 class EvaluationSchema(BaseModel):
     severity_score : int  = Field(ge=1, le=5, description="1=routine to 5=critical")
     severity_label : str  = Field(description="routine|minor|moderate|serious|critical")
@@ -94,6 +88,7 @@ class SupervisorSchema(BaseModel):
     priority       : str = Field(description="normal|high|urgent")
     internal_notes : str = Field(description="max 10 words")
 
+# 關鍵修改：加入 include_raw=True，才能拿到 Token 數量
 eval_llm = lc_llm.with_structured_output(EvaluationSchema, include_raw=True)
 supervisor_llm = lc_llm.with_structured_output(SupervisorSchema, include_raw=True)
 
@@ -101,7 +96,6 @@ supervisor_llm = lc_llm.with_structured_output(SupervisorSchema, include_raw=Tru
 # 2. EMBEDDING FUNCTIONS
 # =====================================================================
 def embed_query(text: str) -> list[float]:
-    """Embed a user query for search."""
     response = client.models.embed_content(
         model="gemini-embedding-001",
         contents=text,
@@ -110,25 +104,22 @@ def embed_query(text: str) -> list[float]:
     return response.embeddings[0].values
 
 # =====================================================================
-# 3. AGENT NODES (WITH PRODUCTION TRY-EXCEPT & LATENCY TRACKING)
+# 3. AGENT NODES
 # =====================================================================
 def retrieval_node(state: TicketState) -> dict:
-    """Searches Pinecone across two namespaces."""
     start_time = time.time()
     metrics = state.get("latency_metrics", {})
     error_logs = state.get("errors", [])
-
+    threshold = state.get("threshold", ESCALATION_CONFIG["log_similarity_threshold"])
+    
     try:
         search_text = state.get("query", "")
         recent_ctx = state.get("recent_context", "")
         if recent_ctx:
-            # Combine historical questions and latest queries
             search_text = f"Context: {recent_ctx}\nCustomer Query: {search_text}"
-        
+            
         query_vector = embed_query(search_text)
-        threshold = ESCALATION_CONFIG["log_similarity_threshold"]
 
-        # Search support-docs
         doc_results = pinecone_index.query(
             vector=query_vector, top_k=3,
             include_metadata=True, namespace=NAMESPACE_DOCS
@@ -136,9 +127,9 @@ def retrieval_node(state: TicketState) -> dict:
         support_contexts = [
             {"source": "support-docs", **match.get("metadata", {})}
             for match in doc_results.get("matches", [])
+            if match.get("score", 0) >= threshold
         ]
 
-        # Search action-logs
         log_results = pinecone_index.query(
             vector=query_vector, top_k=2,
             include_metadata=True, namespace=NAMESPACE_LOGS
@@ -154,10 +145,9 @@ def retrieval_node(state: TicketState) -> dict:
                 "resolution"   : match["metadata"].get("resolution", "")
             }
             for match in log_results.get("matches", [])
-            if threshold < match["score"] < 0.9999
+            if match.get("score", 0) >= threshold
         ]
     except Exception as e:
-        # Fallback: return empty context, pipeline continues
         print(f"⚠️ Retrieval failed: {e}")
         support_contexts = []
         past_cases = []
@@ -168,9 +158,9 @@ def retrieval_node(state: TicketState) -> dict:
 
 
 def evaluation_node(state: TicketState) -> dict:
-    """Evaluates severity, sentiment, issue type, and escalation need."""
     start_time = time.time()
     metrics = state.get("latency_metrics", {})
+    tokens = state.get("token_metrics", {"input": 0, "output": 0, "total": 0})
     error_logs = state.get("errors", [])
     
     dispute_threshold = ESCALATION_CONFIG["past_dispute_threshold"]
@@ -220,29 +210,22 @@ Additional marketplace rules (apply AFTER base severity):
 - seller_rating < {rating_threshold} AND user_type = buyer -> set trust_safety = True
 - Off-platform payment OR account hacking mentioned -> severity 5 + trust_safety = True
 """
-    
-    tokens = state.get("token_metrics", {"input": 0, "output": 0, "total": 0})
-    
+
     try:
         result = eval_llm.invoke(prompt)
         eval_dict = result["parsed"].model_dump()
-
+        
+        # 紀錄 Token 數量
         usage = result["raw"].usage_metadata or {}
         tokens["input"] += usage.get("input_tokens", 0)
         tokens["output"] += usage.get("output_tokens", 0)
         tokens["total"] += usage.get("total_tokens", 0)
         
     except Exception as e:
-        # Circuit breaker fallback triggers route_after_evaluation to DLQ
         eval_dict = {
-            "severity_score": 5,
-            "severity_label": "system_error",
-            "sentiment"     : "unknown",
-            "issue_type"    : "ai_evaluation_failed",
-            "repeat_issue"  : False,
-            "escalate"      : True,
-            "trust_safety"  : True,
-            "reasoning"     : f"LLM evaluation failed. Error: {str(e)}",
+            "severity_score": 5, "severity_label": "system_error", "sentiment": "unknown",
+            "issue_type": "ai_evaluation_failed", "repeat_issue": False, "escalate": True,
+            "trust_safety": True, "reasoning": f"LLM evaluation failed. Error: {str(e)}",
             "suggested_tone": "professional"
         }
         error_logs.append(f"evaluation_error: {str(e)}")
@@ -252,10 +235,8 @@ Additional marketplace rules (apply AFTER base severity):
 
 
 def human_review_node(state: TicketState) -> dict:
-    """Terminal handling node for system failures and Trust & Safety issues."""
     start_time = time.time()
     metrics = state.get("latency_metrics", {})
-    
     eval_result = state.get("evaluation", {})
     reason = "Trust & Safety concern detected" if eval_result.get("trust_safety") else "Automated evaluation failed"
 
@@ -273,25 +254,20 @@ def human_review_node(state: TicketState) -> dict:
         "severity_label": eval_result.get("severity_label", "critical"),
         "reasoning"     : reason
     }
-    
     supervisor_dec = {
-        "escalated"     : True,
-        "action"        : "assign_human",
-        "compensation"  : "none",
+        "escalated"     : True, "action"        : "assign_human", "compensation"  : "none",
         "assigned_to"   : "trust_safety_team" if eval_result.get("trust_safety") else "human_agent",
-        "priority"      : "urgent",
-        "internal_notes": "Human review required - DLQ case"
+        "priority"      : "urgent", "internal_notes": "Human review required - DLQ case"
     }
 
     metrics["human_review_node"] = round(time.time() - start_time, 2)
-
     return {"customer_response": canned_response, "evaluation": updated_eval, "supervisor_decision": supervisor_dec, "latency_metrics": metrics}
 
 
 def response_node(state: TicketState) -> dict:
-    """Generates a customer-facing answer grounded in retrieved context."""
     start_time = time.time()
     metrics = state.get("latency_metrics", {})
+    tokens = state.get("token_metrics", {"input": 0, "output": 0, "total": 0})
     error_logs = state.get("errors", [])
     
     eval_data = state.get("evaluation", {})
@@ -321,31 +297,29 @@ PREVIOUS CONVERSATION HISTORY:
 CURRENT CUSTOMER QUERY: {state.get('query', '')}
 CUSTOMER SENTIMENT: {eval_data.get('sentiment', 'neutral')}
 YOUR RESPONSE:"""
-    
-    tokens = state.get("token_metrics", {"input": 0, "output": 0, "total": 0})
 
     try:
         response = lc_llm.invoke(prompt)
         answer = response.content.strip()
-
+        
+        # 紀錄 Token 數量
         usage = response.usage_metadata or {}
         tokens["input"] += usage.get("input_tokens", 0)
         tokens["output"] += usage.get("output_tokens", 0)
         tokens["total"] += usage.get("total_tokens", 0)
-
+        
     except Exception as e:
         answer = "Thank you for contacting us. We've received your message and our team is looking into this. We'll get back to you as soon as possible."
         error_logs.append(f"response_error: {str(e)}")
 
     metrics["response_node"] = round(time.time() - start_time, 2)
-
     return {"customer_response": answer, "latency_metrics": metrics, "token_metrics": tokens, "errors": error_logs}
 
 
 def supervisor_node(state: TicketState) -> dict:
-    """Activated only for escalated cases to decide actions."""
     start_time = time.time()
     metrics = state.get("latency_metrics", {})
+    tokens = state.get("token_metrics", {"input": 0, "output": 0, "total": 0})
     error_logs = state.get("errors", [])
     eval_data = state.get("evaluation", {})
 
@@ -390,42 +364,36 @@ Decision guide:
 - Repeat issue in past cases   -> escalate_rca
 - Legal mentioned              -> assign legal_team
 """
-    tokens = state.get("token_metrics", {"input": 0, "output": 0, "total": 0})
-    
+
     try:
         result = supervisor_llm.invoke(prompt)
         decision = result["parsed"].model_dump()
-
+        
+        # 紀錄 Token 數量
         usage = result["raw"].usage_metadata or {}
         tokens["input"] += usage.get("input_tokens", 0)
         tokens["output"] += usage.get("output_tokens", 0)
         tokens["total"] += usage.get("total_tokens", 0)
-
+        
     except Exception as e:
         decision = {
-            "escalated"     : True,
-            "action"        : "assign_human",
-            "compensation"  : "none",
-            "assigned_to"   : "human_agent",
-            "priority"      : "high",
+            "escalated"     : True, "action"        : "assign_human", "compensation"  : "none",
+            "assigned_to"   : "human_agent", "priority"      : "high",
             "internal_notes": f"Supervisor LLM failed. Error: {str(e)}"
         }
         error_logs.append(f"supervisor_error: {str(e)}")
 
     metrics["supervisor_node"] = round(time.time() - start_time, 2)
-    
     return {"supervisor_decision": decision, "latency_metrics": metrics, "token_metrics": tokens, "errors": error_logs}
 
 
 def audit_node(state: TicketState) -> dict:
-    """Logs the full interaction to Pinecone action-logs namespace."""
     start_time = time.time()
     metrics = state.get("latency_metrics", {})
     error_logs = state.get("errors", [])
     
     ticket_id = f"TICKET-{uuid.uuid4().hex[:8].upper()}"
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
     supervisor_decision = state.get("supervisor_decision") or {
         "escalated": False, "action": "none", "compensation": "none",
         "assigned_to": "none", "priority": "normal", "internal_notes": "Automated resolution."
@@ -456,11 +424,7 @@ def audit_node(state: TicketState) -> dict:
 
     try:
         pinecone_index.upsert(
-            vectors=[{
-                "id"      : ticket_id,
-                "values"  : embed_query(state.get("query", "")),
-                "metadata": ticket
-            }],
+            vectors=[{"id": ticket_id, "values": embed_query(state.get("query", "")), "metadata": ticket}],
             namespace=NAMESPACE_LOGS
         )
     except Exception as e:
