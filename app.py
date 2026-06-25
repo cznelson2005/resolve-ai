@@ -331,7 +331,7 @@ with left_col:
             st.info("Start a conversation below. Use the same thread to simulate multi-turn support.")
         for msg in st.session_state.conversation:
             with st.chat_message(msg["role"]):
-                st.write(msg["content"])
+                st.markdown(msg["content"].replace("$", "\\$"))
                 if msg.get("meta"):
                     meta = msg["meta"]
                     sev  = meta.get("severity_score", "—")
@@ -541,62 +541,56 @@ with right_col:
 # PIPELINE EXECUTION
 # =====================================================================
 if query:
-    # Add user message to conversation
+    # ── 1. 立刻把用戶訊息加進 conversation ──────────────────
     st.session_state.conversation.append({
         "role"   : "user",
         "content": query,
         "meta"   : None
     })
 
-    #Extract previous conversation 
-    history_lines = []
-    # [:-1] excludes the latest query
-    for msg in st.session_state.conversation[:-1]:
-        speaker = "Customer" if msg["role"] == "user" else "Agent"
-        history_lines.append(f"{speaker}: {msg['content']}")
-        
-    # extract past 20 histories
-    full_history_str = "\n".join(history_lines[-20:]) 
-    # For Pinecone indexing (only keep 1-2 sentense for phrase indexing)
-    recent_context_str = "\n".join(history_lines[-2:])
+    # ── 2. 立刻顯示用戶訊息（不等 pipeline）────────────────
+    with chat_container:
+        with st.chat_message("user"):
+            st.markdown(query.replace("$", "\\$"))
 
-    with st.spinner("🤖 Running pipeline..."):
-        # Simulate tool calls first (visual effect)
-        tool_calls = simulate_tool_calls(
-            query, user_type, transaction_value, seller_rating, past_disputes
-        )
-        time.sleep(0.3)  # brief pause for visual realism
+    # ── 3. 顯示 spinner 並跑 pipeline ───────────────────────
+    with chat_container:
+        with st.chat_message("assistant"):
+            with st.spinner("Analysing your issue..."):
+                tool_calls = simulate_tool_calls(
+                    query, user_type, transaction_value,
+                    seller_rating, past_disputes
+                )
+                time.sleep(0.3)
 
-        # Run actual pipeline
-        t_start = time.time()
+                t_start = time.time()
+                state   = pipeline.invoke(
+                    {
+                        "query"            : query,
+                        "chat_history"     : full_history_str,
+                        "recent_context"   : recent_context_str,
+                        "user_type"        : user_type,
+                        "transaction_value": float(transaction_value),
+                        "seller_rating"    : float(seller_rating),
+                        "past_disputes"    : int(past_disputes),
+                        "latency_metrics"  : {},
+                        "token_metrics"    : {"input": 0, "output": 0, "total": 0},
+                        "errors"           : [],
+                        "messages"         : []
+                    },
+                    config={"configurable": {"thread_id": st.session_state.thread_id}}
+                )
 
-        initial_state = {
-            "query"            : query,
-            "chat_history"     : full_history_str,
-            "recent_context"   : recent_context_str,
-            "user_type"        : user_type,
-            "transaction_value": float(transaction_value),
-            "seller_rating"    : float(seller_rating),
-            "past_disputes"    : int(past_disputes),
-            "latency_metrics"  : {},
-            "token_metrics"    : {"input": 0, "output": 0, "total": 0},
-            "errors"           : []
-        }
-        
-        state = pipeline.invoke(
-            initial_state,
-            config={"configurable": {"thread_id": st.session_state.thread_id}}
-        )
+                state["tool_calls_simulated"] = tool_calls
+                state["query"]                = query
+                total_latency = round(time.time() - t_start, 2)
 
-        # Attach tool calls to state for display
-        state["tool_calls_simulated"] = tool_calls
-        state["query"]                = query
-        total_latency = round(time.time() - t_start, 2)
+            # ── 4. Pipeline 跑完後顯示回應 ──────────────────
+            response   = state.get("customer_response", "Sorry, something went wrong.")
+            evaluation = state.get("evaluation", {})
+            st.markdown(response.replace("$", "\\$"))
 
-    # Add assistant response to conversation
-    response = state.get("customer_response", "Sorry, something went wrong.")
-    evaluation = state.get("evaluation", {})
-
+    # ── 5. 把 assistant 回應加進 conversation ───────────────
     st.session_state.conversation.append({
         "role"   : "assistant",
         "content": response,
