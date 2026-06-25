@@ -253,16 +253,16 @@ with st.sidebar:
 
 st.divider()
     
-    # --- Debug Token Tools ---
-    st.subheader("🔍 Debug Tools")
-    if st.button("Inspect Last State Data"):
-        if st.session_state.last_state:
-            st.write("Last Token Metrics:")
-            st.json(st.session_state.last_state.get("token_metrics", {}))
-            st.write("Raw Token Count Found?")
-            # This helps check if the state is actually receiving the data
-        else:
-            st.warning("Please run a query first!")
+# --- Debug Token Tools ---
+st.subheader("🔍 Debug Tools")
+if st.button("Inspect Last State Data"):
+    if st.session_state.last_state:
+        st.write("Last Token Metrics:")
+        st.json(st.session_state.last_state.get("token_metrics", {}))
+        st.write("Raw Token Count Found?")
+        # This helps check if the state is actually receiving the data
+    else:
+        st.warning("Please run a query first!")
 # =====================================================================
 # SCENARIO PRESETS
 # =====================================================================
