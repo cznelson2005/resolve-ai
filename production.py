@@ -66,7 +66,7 @@ class TicketState(TypedDict, total=False):
     messages          : Annotated[list[BaseMessage], add_messages]
     
     latency_metrics   : Dict[str, float]
-    token_metrics     : Dict[str, int]   # <--- 新增追蹤 Token 的狀態
+    token_metrics     : Dict[str, int]   
     errors            : List[str]
 
 class EvaluationSchema(BaseModel):
@@ -88,7 +88,7 @@ class SupervisorSchema(BaseModel):
     priority       : str = Field(description="normal|high|urgent")
     internal_notes : str = Field(description="max 10 words")
 
-# 關鍵修改：加入 include_raw=True，才能拿到 Token 數量
+# Ensure include_raw=True is set to extract token usage metadata
 eval_llm = lc_llm.with_structured_output(EvaluationSchema, include_raw=True)
 supervisor_llm = lc_llm.with_structured_output(SupervisorSchema, include_raw=True)
 
@@ -102,6 +102,32 @@ def embed_query(text: str) -> list[float]:
         config={"task_type": "RETRIEVAL_QUERY"}
     )
     return response.embeddings[0].values
+
+# =====================================================================
+# 2.5 HELPER FUNCTIONS
+# =====================================================================
+def _extract_tokens(ai_msg) -> tuple[int, int, int]:
+    """
+    Robustly extract tokens from LangChain AIMessage across different versions.
+    Returns: (input_tokens, output_tokens, total_tokens)
+    """
+    # 1. Try extracting from newer LangChain standard usage_metadata
+    if hasattr(ai_msg, "usage_metadata") and ai_msg.usage_metadata:
+        return (
+            ai_msg.usage_metadata.get("input_tokens", 0),
+            ai_msg.usage_metadata.get("output_tokens", 0),
+            ai_msg.usage_metadata.get("total_tokens", 0)
+        )
+    # 2. Fallback: Extract from older/provider-specific response_metadata
+    if hasattr(ai_msg, "response_metadata") and ai_msg.response_metadata:
+        token_usage = ai_msg.response_metadata.get("token_usage", {})
+        # Note: These keys might be specific to Gemini's raw response formatting
+        return (
+            token_usage.get("prompt_token_count", 0),
+            token_usage.get("candidates_token_count", 0),
+            token_usage.get("total_token_count", 0)
+        )
+    return 0, 0, 0
 
 # =====================================================================
 # 3. AGENT NODES
@@ -215,11 +241,11 @@ Additional marketplace rules (apply AFTER base severity):
         result = eval_llm.invoke(prompt)
         eval_dict = result["parsed"].model_dump()
         
-        # 紀錄 Token 數量
-        usage = result["raw"].usage_metadata or {}
-        tokens["input"] += usage.get("input_tokens", 0)
-        tokens["output"] += usage.get("output_tokens", 0)
-        tokens["total"] += usage.get("total_tokens", 0)
+        # Extract and accumulate token usage robustly
+        i_toks, o_toks, t_toks = _extract_tokens(result["raw"])
+        tokens["input"] += i_toks
+        tokens["output"] += o_toks
+        tokens["total"] += t_toks
         
     except Exception as e:
         eval_dict = {
@@ -302,11 +328,11 @@ YOUR RESPONSE:"""
         response = lc_llm.invoke(prompt)
         answer = response.content.strip()
         
-        # 紀錄 Token 數量
-        usage = response.usage_metadata or {}
-        tokens["input"] += usage.get("input_tokens", 0)
-        tokens["output"] += usage.get("output_tokens", 0)
-        tokens["total"] += usage.get("total_tokens", 0)
+        # Extract and accumulate token usage robustly
+        i_toks, o_toks, t_toks = _extract_tokens(response)
+        tokens["input"] += i_toks
+        tokens["output"] += o_toks
+        tokens["total"] += t_toks
         
     except Exception as e:
         answer = "Thank you for contacting us. We've received your message and our team is looking into this. We'll get back to you as soon as possible."
@@ -369,11 +395,11 @@ Decision guide:
         result = supervisor_llm.invoke(prompt)
         decision = result["parsed"].model_dump()
         
-        # 紀錄 Token 數量
-        usage = result["raw"].usage_metadata or {}
-        tokens["input"] += usage.get("input_tokens", 0)
-        tokens["output"] += usage.get("output_tokens", 0)
-        tokens["total"] += usage.get("total_tokens", 0)
+        # Extract and accumulate token usage robustly
+        i_toks, o_toks, t_toks = _extract_tokens(result["raw"])
+        tokens["input"] += i_toks
+        tokens["output"] += o_toks
+        tokens["total"] += t_toks
         
     except Exception as e:
         decision = {
