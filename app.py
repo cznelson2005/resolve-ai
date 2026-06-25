@@ -17,6 +17,47 @@ st.set_page_config(
     layout="wide"
 )
 
+# --- INJECT RESPONSIVE CSS ---
+# This custom CSS uses clamp() and viewport units (vw) to dynamically 
+# scale fonts and spacing based on the browser window size, preventing 
+# the UI from looking cramped or overly large on different screens.
+st.markdown("""
+<style>
+    /* 1. Global Font Adjustment: Creates a cleaner, more professional baseline */
+    html, body, [class*="css"] {
+        font-size: 14px; 
+    }
+
+    /* 2. Responsive Metrics (Decision Dashboard): Auto-scales with window width */
+    [data-testid="stMetricValue"] {
+        /* Syntax: clamp(MIN, VAL, MAX) */
+        font-size: clamp(1.2rem, 1.5vw, 1.8rem) !important;
+    }
+    [data-testid="stMetricLabel"] {
+        font-size: clamp(0.8rem, 1vw, 1rem) !important;
+        white-space: nowrap; /* Prevents long labels from wrapping awkwardly */
+    }
+
+    /* 3. Layout Spacing: Reduces default Streamlit padding to maximize screen real estate */
+    .block-container {
+        padding-top: 2rem !important;
+        padding-bottom: 2rem !important;
+        max-width: 95% !important; 
+    }
+    
+    /* 4. Data Density: Slightly smaller fonts for JSON and Expander content to save space */
+    .streamlit-expanderContent, .stJson {
+        font-size: 0.85rem !important;
+    }
+    
+    /* 5. Button Styling: Ensures the primary action button maintains structure */
+    button[kind="primary"] {
+        width: 100%;
+        padding: 0.5rem !important;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # =====================================================================
 # PIPELINE BUILDER
 # =====================================================================
@@ -473,7 +514,7 @@ if query:
         
     # extract past 20 histories
     full_history_str = "\n".join(history_lines[-20:]) 
-    # For Pinecone indexing（only keep 1-2 sentense for phrase indexing）
+    # For Pinecone indexing (only keep 1-2 sentense for phrase indexing)
     recent_context_str = "\n".join(history_lines[-2:])
 
     with st.spinner("🤖 Running pipeline..."):
