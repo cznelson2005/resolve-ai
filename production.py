@@ -457,4 +457,23 @@ def audit_node(state: TicketState) -> dict:
         error_logs.append(f"audit_error: {str(e)}")
 
     metrics["audit_node"] = round(time.time() - start_time, 2)
+
     return {"ticket_id": ticket_id, "supervisor_decision": supervisor_decision, "latency_metrics": metrics, "errors": error_logs}
+
+def debug_token_format():
+    test_result = eval_llm.invoke("Hello, what is 1+1?")
+    raw_msg     = test_result["raw"]
+    
+    print("=== include_raw result keys ===")
+    print(test_result.keys())
+    
+    print("\n=== raw AIMessage type ===")
+    print(type(raw_msg))
+    
+    print("\n=== usage_metadata ===")
+    print(getattr(raw_msg, "usage_metadata", "NOT FOUND"))
+    
+    print("\n=== response_metadata ===")
+    print(getattr(raw_msg, "response_metadata", "NOT FOUND"))
+
+debug_token_format()
